@@ -42,7 +42,7 @@ Do **NOT** waste time installing compilers, CMake, Ninja, vcpkg, or cloning Comm
 | `sdk/AddressLibrary/versionlibdb.h` | Upgraded header-only `VersionDb` parser for raw SKSE64 plugins supporting **Format 1 (`1.5.x`), Format 2 (`1.6.x`), AND Format 5 (`1.7.99+`)**. |
 | `sdk/address_tables/bin/` | Cached Address Library databases (`version-*.bin` and `versionlib-*.bin`); supplemented automatically at lookup time by Skyrim's installed `Data\SKSE\Plugins\version*.bin`. |
 | `tools/` | Portable `CMake 4.5.1`, `Ninja 1.13.2`, `XMake 3.1.2`, and bootstrapped `vcpkg` (with portable binary cache in `tools/vcpkg/archives/` and automatic `--clean-after-build` cleanup). |
-| `.venv/` / `requirements.txt` | Project-local Python virtual environment with `pefile`, `capstone`, `keystone-engine`, and `lief` for PE inspection and x64 reverse-engineering/patching. |
+| `.venv/` / `requirements.txt` | Machine-local Python virtual environment (gitignored, non-portable across machines) with `pefile`, `capstone`, `keystone-engine`, and `lief` for PE inspection and x64 RE/patching. If `.venv` is missing or `pyvenv.cfg` points to a stale Python path, repair with `python -m venv .venv --upgrade` or recreate (`python -m venv .venv` + `.venv\Scripts\python.exe -m pip install -r requirements.txt`). |
 | `workspace/` | Working directory where GitHub mod repositories are cloned and edited. |
 | `dist/` | Output directory where finished `SKSE/Plugins/<Mod>.dll` files and `<Mod>_Updated.zip` archives are placed. |
 

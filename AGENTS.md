@@ -10,6 +10,15 @@ Never assume or hardcode a target Skyrim version string. Always detect the activ
 * **Mandatory Build-Script Auditing:** Never run `.bat`, `.cmd`, `.ps1`, `.sh`, `.vbs`, or `.exe` files bundled inside a target mod repo. Always run `scripts/analyze_mod.py` and `scripts/build_mod.py` (which run `skse_env.audit_mod_security` automatically); if dangerous shell/network hooks (`execute_process`, `add_custom_command`, `<Exec`, `curl`, `Invoke-WebRequest`, `-EncodedCommand`, etc.) are flagged, stop and report the exact `file:line` to the user without overriding.
 * **Containment:** Restrict writes to `workspace/` and `dist/` (and `Data\SKSE\Plugins` only via `scripts/live_test_skse.ps1`). Never read, print, or transmit credentials, `.env` files, SSH keys, or browser profiles.
 
+## Python Environment (`.venv`)
+`.venv/` is machine-local (gitignored and non-portable across machines). If `.venv\Scripts\python.exe` is missing or fails because `pyvenv.cfg` points to a stale Python path, repair or recreate it locally before running RE/patching scripts (`pefile`, `capstone`, `keystone-engine`, `lief`):
+```powershell
+python -m venv .venv --upgrade
+# Or if .venv does not exist / uses a different Python minor version:
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
 ## Quick Execution Summary
 0. **Detect Active Target Runtime & Sync SDK (Required First)**:
    ```powershell
