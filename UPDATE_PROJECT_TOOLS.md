@@ -19,7 +19,7 @@ Scan the entire repository (`.md`, `CMakeLists.txt`, `CMakePresets.json`, `vcpkg
    - Run a clean configure/check pass on the build template (CMake / vcpkg / xmake) and `--help` / syntax checks on all Python and PowerShell scripts to confirm there are no deprecated flags, broken baselines, or version mismatches.
 
 ### Step 3: Update All `.md` Files & Add a Maintenance Protocol
-1. **Eliminate Stale Tool/Library References:** Update every `.md` file (`README.md`, `instructions.md`, build guides, and binary-patching docs) so all installation commands, compiler requirements, `CommonLibSSE-NG` branch/fork instructions, `vcpkg`/`CMake` presets, and reverse-engineering CLI commands reflect the upgraded toolchain.
+1. **Eliminate Stale Tool/Library References:** Update every `.md` file (`README.md`, `SETUP.md`, `instructions.md`, build guides, and binary-patching docs) so all installation commands, fallback release tags/URLs, compiler requirements, `CommonLibSSE-NG` branch/fork instructions, `vcpkg`/`CMake` presets, and reverse-engineering CLI commands reflect the upgraded toolchain.
 2. **Preserve Historical Context Only Where Needed:** Keep old versions (like `1.5.97` or `1.6.1170`) strictly where explaining legacy plugin migration examples; remove all outdated tool instructions (e.g., deprecated `CharmedBaryon` archive refs if superseded by active `alandtse/CommonLibSSE-NG`, old MSVC/CMake versions, or legacy static scripts).
 3. **Add a "Keeping Toolchains Current" Rule for Future Agents:** Add a concise section in `instructions.md` instructing future AI agents to check `git submodule status` / `vcpkg` baselines / installed Skyrim & SKSE versions before starting any plugin port, rather than blindly trusting cached version numbers.
 

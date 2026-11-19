@@ -9,16 +9,12 @@ __pycache__/
 workspace/*
 dist/*
 *.bak
-sdk/address_tables/.id_map_cache.json
-sdk/CommonLibSSE-NG-Installed/
 
-# Portable third-party toolchains (bundled in Nexus release archive; excluded on GitHub)
-tools/cmake/
-tools/ninja/
-tools/xmake/
-tools/vcpkg/
+# Portable third-party toolchains & local SDK installs (installed locally via SETUP.md; excluded from Nexus/GitHub archives)
+tools/*
+!tools/.gitkeep
+sdk/*
+!sdk/.gitkeep
 
 # IDE / build intermediates
 .vs/
-sdk/preload/build/*
-!sdk/preload/build/AddressLibraryV5Shim.dll

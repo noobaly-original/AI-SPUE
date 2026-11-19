@@ -11,7 +11,7 @@ binary-patching workflow documented in `docs/BINARY_PATCHING_GUIDE.md`:
   - `scripts/pe_inspect.py`       (PE64, sections, exports/imports, .reloc, SKSE metadata, xrefs, disasm)
   - `scripts/addrlib_xref.py`     (Address Library format checks & ID/offset cross-referencing)
   - `scripts/manifest_patcher.py` (Deterministic SHA-256 + expected-bytes patches.json engine, code caves, trampolines, .reloc validation, PE checksum)
-  - `scripts/live_test_skse.ps1`  (Automated deploy, SKSE launch, log streaming & crash triage runner)
+  - `scripts/live_test_skse.py`   (Automated deploy, SKSE launch, log streaming & crash triage runner)
 
 Original description:
 Best-effort fallback tool for closed-source or unbuildable SKSE64 `.dll` plugins

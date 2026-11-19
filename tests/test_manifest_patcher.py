@@ -12,10 +12,12 @@ from unittest import mock
 TESTS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TESTS_DIR.parent
 SCRIPTS_DIR = REPO_ROOT / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
+for p in (SCRIPTS_DIR, TESTS_DIR):
+    if str(p) not in sys.path:
+        sys.path.insert(0, str(p))
 
 import manifest_patcher  # noqa: E402
+import pe_fixture  # noqa: E402
 import pe_inspect  # noqa: E402
 import skse_env  # noqa: E402
 import verify_dll  # noqa: E402
@@ -27,13 +29,23 @@ except ImportError:
 
 
 class TestManifestPatcher(unittest.TestCase):
-    SHIM_PATH = REPO_ROOT / "sdk" / "preload" / "build" / "AddressLibraryV5Shim.dll"
+    _tmp_dir: tempfile.TemporaryDirectory
+    FIXTURE_DLL: Path
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._tmp_dir = tempfile.TemporaryDirectory()
+        cls.FIXTURE_DLL = pe_fixture.write_test_plugin_dll(Path(cls._tmp_dir.name) / "FixturePlugin.dll")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._tmp_dir.cleanup()
 
     def test_init_verify_dry_run_and_apply_with_new_section_and_zip(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            dll_copy = root / "ShimCopy.dll"
-            shutil.copy2(self.SHIM_PATH, dll_copy)
+            dll_copy = root / "FixtureCopy.dll"
+            shutil.copy2(self.FIXTURE_DLL, dll_copy)
 
             # Backdate timestamp and clear AddressLibraryV5 bit so init-manifest & metadata patching have work to do
             raw = bytearray(dll_copy.read_bytes())
@@ -57,12 +69,12 @@ class TestManifestPatcher(unittest.TestCase):
             self.assertEqual(manifest["metadata_patches"]["set_version_independence_ex"], ["AddressLibraryV5"])
 
             # Add both a text-padding cave and a new executable .patch section trampoline + direct patch
-            preload_rva = pe_info["exports"]["SKSEPlugin_Preload"]["rva"]
-            preload_off = pe_info["exports"]["SKSEPlugin_Preload"]["file_offset"]
-            first5 = bytes(raw[preload_off : preload_off + 5])
+            hook_rva = pe_info["exports"]["SKSEPlugin_Load"]["rva"]
+            hook_off = pe_info["exports"]["SKSEPlugin_Load"]["file_offset"]
+            first5 = bytes(raw[hook_off : hook_off + 5])
             first5_hex = " ".join(f"{b:02X}" for b in first5)
 
-            manifest["symbols"]["PreloadTarget"] = f"0x{preload_rva + 5:X}"
+            manifest["symbols"]["HookTarget"] = f"0x{hook_rva + 5:X}"
             manifest["code_caves"].append(
                 {
                     "name": "helper_cave",
@@ -72,8 +84,8 @@ class TestManifestPatcher(unittest.TestCase):
             )
             manifest["trampolines"].append(
                 {
-                    "name": "preload_trampoline",
-                    "hook_rva": f"0x{preload_rva:X}",
+                    "name": "load_trampoline",
+                    "hook_rva": f"0x{hook_rva:X}",
                     "stolen_len": 5,
                     "expected_hex": first5_hex,
                     "placement": "new_section",
@@ -92,7 +104,7 @@ class TestManifestPatcher(unittest.TestCase):
                 0,
             )
             before = dll_copy.read_bytes()
-            out_dll = root / "ShimPatched.dll"
+            out_dll = root / "FixturePatched.dll"
             self.assertEqual(
                 manifest_patcher.cmd_apply(
                     types.SimpleNamespace(
@@ -143,11 +155,11 @@ class TestManifestPatcher(unittest.TestCase):
                 self.assertEqual(patched_pe["checksum_stored"], pe_obj.generate_checksum())
             self.assertEqual(patched_pe["checksum_stored"], patched_pe["checksum_computed"])
 
-            # Verify E9 jump at preload_rva targets .patch section
-            patched_hook_off = pe_inspect.rva_to_file_offset(preload_rva, patched_pe["sections"])
+            # Verify E9 jump at hook_rva targets .patch section
+            patched_hook_off = pe_inspect.rva_to_file_offset(hook_rva, patched_pe["sections"])
             self.assertEqual(patched_bytes[patched_hook_off], 0xE9)
             disp = struct.unpack_from("<i", patched_bytes, patched_hook_off + 1)[0]
-            self.assertEqual(preload_rva + 5 + disp, patch_sec["virtual_addr"])
+            self.assertEqual(hook_rva + 5 + disp, patch_sec["virtual_addr"])
 
             # Verify Windows LoadLibraryExW + SKSE compatibility check passes
             vres = verify_dll.verify_dll(out_dll, target_runtime=None)
@@ -157,12 +169,12 @@ class TestManifestPatcher(unittest.TestCase):
             zip_path = temp_dist / f"{manifest['plugin_name']}_Updated.zip"
             self.assertTrue(zip_path.exists())
             with zipfile.ZipFile(zip_path, "r") as zf:
-                self.assertIn("SKSE/Plugins/ShimPatched.dll", [n.replace("\\", "/") for n in zf.namelist()])
+                self.assertIn("SKSE/Plugins/FixturePatched.dll", [n.replace("\\", "/") for n in zf.namelist()])
 
     def test_safety_rejections_sha_expected_wildcards_and_reloc(self) -> None:
-        data = self.SHIM_PATH.read_bytes()
+        data = self.FIXTURE_DLL.read_bytes()
         pe_info = pe_inspect.parse_pe64(data)
-        preload_rva = pe_info["exports"]["SKSEPlugin_Preload"]["rva"]
+        hook_rva = pe_info["exports"]["SKSEPlugin_Load"]["rva"]
 
         # 1. SHA-256 mismatch rejected
         bad_sha_manifest = {
@@ -179,7 +191,7 @@ class TestManifestPatcher(unittest.TestCase):
             "input_sha256": manifest_patcher.sha256_bytes(data),
             "patches": [
                 {
-                    "rva": f"0x{preload_rva:X}",
+                    "rva": f"0x{hook_rva:X}",
                     "expected_hex": "FF FF FF",
                     "patch_hex": "90 90 90",
                 }
@@ -193,14 +205,14 @@ class TestManifestPatcher(unittest.TestCase):
             "input_sha256": manifest_patcher.sha256_bytes(data),
             "patches": [
                 {
-                    "rva": f"0x{preload_rva:X}",
+                    "rva": f"0x{hook_rva:X}",
                     "expected_hex": "?? ?? ??",
                     "patch_hex": "90 90 90",
                 }
             ],
         }
         patched_wild, _ = manifest_patcher.apply_manifest_bytes(data, ok_wildcard_manifest)
-        self.assertEqual(bytes(patched_wild[pe_info["exports"]["SKSEPlugin_Preload"]["file_offset"] :][:3]), b"\x90\x90\x90")
+        self.assertEqual(bytes(patched_wild[pe_info["exports"]["SKSEPlugin_Load"]["file_offset"] :][:3]), b"\x90\x90\x90")
 
         # 3. ASLR .reloc overlap rejected unless allow_reloc_overlap=True
         rel = pe_info["relocations"][0]

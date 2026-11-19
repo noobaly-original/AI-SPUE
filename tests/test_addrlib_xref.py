@@ -2,6 +2,7 @@ import contextlib
 import io
 import json
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -9,8 +10,9 @@ from pathlib import Path
 TESTS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TESTS_DIR.parent
 SCRIPTS_DIR = REPO_ROOT / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
+for p in (SCRIPTS_DIR, TESTS_DIR):
+    if str(p) not in sys.path:
+        sys.path.insert(0, str(p))
 
 import addrlib_xref  # noqa: E402
 import inspect_bin  # noqa: E402
@@ -85,11 +87,14 @@ class TestAddrLibXref(unittest.TestCase):
         diff_data = json.loads(buf.getvalue())
         self.assertEqual(len(diff_data["items"]), 2)
 
-        shim_path = REPO_ROOT / "sdk" / "preload" / "build" / "AddressLibraryV5Shim.dll"
-        rep = addrlib_xref.scan_dll_address_library(shim_path, target_runtime=target_dash)
-        self.assertEqual(rep["target_bin_format"], 5)
-        self.assertFalse(rep["pre_v5_timestamp"])
-        self.assertEqual(rep["findings"], [])
+        import pe_fixture  # local test helper
+
+        with tempfile.TemporaryDirectory() as td:
+            dll_path = pe_fixture.write_test_plugin_dll(Path(td) / "FixturePlugin.dll")
+            rep = addrlib_xref.scan_dll_address_library(dll_path, target_runtime=target_dash)
+            self.assertEqual(rep["target_bin_format"], 5)
+            self.assertFalse(rep["pre_v5_timestamp"])
+            self.assertEqual(rep["findings"], [])
 
 
 if __name__ == "__main__":

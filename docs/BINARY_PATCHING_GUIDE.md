@@ -5,6 +5,8 @@
 
 > **DETECT-FIRST RULE**: Never hardcode or assume a target Skyrim version string, packed version DWORD, or `versionlib-*.bin` filename. Always resolve `<TARGET_VERSION>`, `<TARGET_VERSION_FULL>`, `<TARGET_RUNTIME_DASH>`, `<TARGET_ADDRLIB_BIN>`, and `<TARGET_VERSION_HEX>` dynamically from the user's installed `SkyrimSE.exe`, `skse64_*.dll`, and `Data\SKSE\Plugins\version*.bin` files first!
 
+> **FIRST-TIME SETUP NOTE**: On a fresh extraction where `sdk/address_tables/` or `.venv/` are missing, read and run [`../SETUP.md`](../SETUP.md) first (or its `.venv` + `sdk/address_tables/` steps — Steps 0, 2, 5, and 6 — if you only need binary inspection/patching without C++ compilation).
+
 ---
 
 ## 0. Decision Tree & Toolset Overview
@@ -12,8 +14,7 @@
 | Scenario | Recommended Action |
 | :--- | :--- |
 | Full C++ source compiles locally | Recompile from source (`skse_env.py` → `analyze_mod.py` → `upgrade_mod.py` → `build_mod.py`). |
-| Source is missing private headers or unavailable, and plugin only needs `AddressLibraryV5` / `SKSEPlugin_Version` / Format 5 loader / targeted offset fixes | **Follow Phases 0–4 below** using the modular binary-patching toolset. |
-| Large pre-v5 plugin modlist needing runtime Format 5 translation without editing every DLL | Test [`../sdk/preload/main.cpp`](../sdk/preload/main.cpp) (`sdk/preload/build/AddressLibraryV5Shim.dll`) alongside metadata patches as appropriate. |
+| Source is missing private headers or unavailable, and plugin only needs `AddressLibraryV5` / `SKSEPlugin_Version` / Format 5 loader / targeted offset fixes | **Follow Phases 0–4 below** using the modular binary-patching toolset (`manifest_patcher.py`). |
 
 ### Active Modular Toolset (Replaces Archived `scripts/legacy/patch_binary.py`)
 
@@ -24,7 +25,7 @@
 | `scripts/addrlib_xref.py` | Address Library `.bin` cross-referencer: lists format capabilities (`v1`/`v2`/`v5`), maps IDs and RVAs/VAs across historical releases (e.g., `1.6.1170` → `<TARGET_VERSION>`), diagnoses embedded DLL format errors, and inspects `SkyrimSE.exe` function bytes. |
 | `scripts/manifest_patcher.py` | Deterministic `patches.json` patch engine: validates input SHA-256 & expected bytes (with `??` wildcards), expands symbolic `{{rel32:...}}`, allocates `.text` caves or appends an executable `.patch` section, rejects `.reloc` ASLR corruption, updates `SKSEPlugin_Version`, and recalculates PE checksum. |
 | `scripts/verify_dll.py` | Loads any PE64 `.dll` with `DONT_RESOLVE_DLL_REFERENCES` and runs SKSE64's (`2.3.0+`) `PluginManager::CheckPluginCompatibility` across historical baselines and the detected target runtime. |
-| `scripts/live_test_skse.ps1` | PowerShell test runner: detects installed `SkyrimSE.exe`/`skse64_*.dll`/`.bin`, backs up existing plugin, deploys patched `.dll`, clears logs, launches `skse64_loader.exe`, streams `skse64.log` & `<Plugin>.log`, detects early CTDs/hangs, collects Crash Logger / Trainwreck + Windows Event Log diagnostics, and restores backups. |
+| `scripts/live_test_skse.py` | Pure-Python automated test runner: detects installed `SkyrimSE.exe`/`skse64_*.dll`/`.bin`, backs up existing plugin, deploys patched `.dll`, clears logs, launches `skse64_loader.exe`, streams `skse64.log` & `<Plugin>.log`, detects early CTDs/hangs, collects Crash Logger / Trainwreck + Windows Event Log diagnostics, and restores backups. |
 | `scripts/triage_crash.py` | Parses `skse64.log` and the newest Crash Logger / Trainwreck `crash-*.log`, printing suspect `Module.dll+0xRVA` frames with exact `pe_inspect.py disasm` commands. |
 
 *(Note: `scripts/legacy/patch_binary.py` is archived strictly for historical reference—do not rely on its brittle regex heuristics for new work.)*
@@ -143,8 +144,7 @@ Even after fixing `SKSEPlugin_Version` metadata, plugins compiled before Format 
 
 Two common CommonLibSSE/versiondb issues inside old DLLs:
 1. **Format 2-only reader**: The embedded `REL::IDDatabase::load_file` + `unpack_file` (or `versiondb::Load`) checks `format != 2` and throws `"Unsupported address library format"` or returns `false`.
-   - **Remediation Option A**: Patch the format check, header skip (`0x48` bytes after `ver[4]` to reach `offsetCount` at offset `0x5C`), and read loop via a `patches.json` trampoline/code cave (Format 5 loop writes `(uint64_t id, uint64_t offset)` pairs into the plugin's table).
-   - **Remediation Option B (Quick Runtime Shim)**: Load `sdk/preload/build/AddressLibraryV5Shim.dll` in `Data\SKSE\Plugins\`, which caches a Format 2 translation (`.v2cache.bin`) and transparently redirects pre-v5 plugins' `CreateFile*` calls while leaving Format-5-native plugins untouched.
+   - **Remediation**: Patch the format check, header skip (`0x48` bytes after `ver[4]` to reach `offsetCount` at offset `0x5C`), and read loop directly via a `patches.json` trampoline/code cave (Format 5 loop writes `(uint64_t id, uint64_t offset)` pairs into the plugin's table).
 2. **`REL::Module::load_segments` `1.7.x+` SE Misclassification Bug**:
    - Old CommonLibSSE-NG checked `if (version.minor() == 6)` (`cmp ax, 6; setne al` = `66 83 F8 06 0F 95 C0`). On Skyrim `1.7.x` (or any future minor `>= 7`), `minor != 6`, misclassifying the game as **SE (`1.5.97`)**!
    - **Fix**: Patch `0F 95 C0` (`setne al`) to `0F 92 C0` (`setb al` — unsigned `< 6` is SE, `>= 6` is AE). `manifest_patcher.py init-manifest` detects this pattern automatically!
@@ -266,13 +266,13 @@ After `manifest_patcher.py apply` passes `verify_dll.py` statically, **always va
 
 ### 4.1 Run the Automated Live Test Harness
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/live_test_skse.ps1" `
-  -PluginDll "dist\ExamplePlugin\SKSE\Plugins\ExamplePlugin.dll" `
-  -TimeoutSeconds 45 `
-  -AutoClose
+python "scripts/live_test_skse.py" `
+  --plugin-dll "dist\ExamplePlugin\SKSE\Plugins\ExamplePlugin.dll" `
+  --timeout 45 `
+  --auto-close
 ```
 
-- Automatically detects installed `SkyrimSE.exe` version, `skse64_*.dll`, and `versionlib-*.bin`, backs up any existing `<Plugin>.dll` in `Data\SKSE\Plugins`, and restores it when finished (pass `-KeepDeployed` to keep the patched DLL in place once verified).
+- Automatically detects installed `SkyrimSE.exe` version, `skse64_*.dll`, and `versionlib-*.bin`, backs up any existing `<Plugin>.dll` in `Data\SKSE\Plugins`, and restores it when finished (pass `--keep-deployed` to keep the patched DLL in place once verified).
 - Clears previous `skse64.log` and `<Plugin>.log`, launches `skse64_loader.exe`, streams logs live, monitors `SkyrimSE.exe` responsiveness, and checks Crash Logger / Trainwreck + Windows Application Event Log.
 - **Exit Codes**:
   - `0`: Plugin loaded and SKSE reached `init complete` cleanly.
@@ -282,10 +282,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/live_test_skse.ps1"
   - `4`: Setup/launch failure (`SkyrimDir` or `skse64_loader.exe` missing).
 
 ### 4.2 Map Crash Stack RVAs Back to Disassembly & Iterate
-When exit code is `1` or `2` (or run offline diagnostics with `-NoLaunch`):
+When exit code is `1` or `2` (or run offline diagnostics with `--no-launch`):
 ```powershell
 # Inspect latest logs and crash dumps offline
-powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/live_test_skse.ps1" -NoLaunch
+python "scripts/live_test_skse.py" --no-launch
 python "scripts/triage_crash.py"
 ```
 
@@ -298,5 +298,5 @@ python "scripts/triage_crash.py"
    ```powershell
    python "scripts/addrlib_xref.py" map-offset 0x<SkyrimRVA> --from <TARGET_RUNTIME_DASH> --to 1-6-1170-0
    ```
-4. Refine `patches.json`, re-apply with `manifest_patcher.py apply`, and re-run `live_test_skse.ps1` until exit code `0` is achieved.
+4. Refine `patches.json`, re-apply with `manifest_patcher.py apply`, and re-run `live_test_skse.py` until exit code `0` is achieved.
 5. Package final deliverables into `dist/<ModName>/SKSE/Plugins/<ModName>.dll` and `dist/<ModName>_Updated.zip` (pass `--zip` to `manifest_patcher.py apply`).

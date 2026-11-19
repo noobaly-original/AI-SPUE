@@ -9,11 +9,12 @@ TESTS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TESTS_DIR.parent
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 LEGACY_DIR = SCRIPTS_DIR / "legacy"
-for d in (SCRIPTS_DIR, LEGACY_DIR):
+for d in (SCRIPTS_DIR, LEGACY_DIR, TESTS_DIR):
     if str(d) not in sys.path:
         sys.path.insert(0, str(d))
 
 import patch_binary  # noqa: E402
+import pe_fixture  # noqa: E402
 import triage_modlist  # noqa: E402
 import verify_dll  # noqa: E402
 
@@ -83,25 +84,24 @@ class TestVerifyAndPatchBinary(unittest.TestCase):
         self.assertEqual(verify_dll.check_compat(1, "P", 0, 0, compat_with_185, 1700000000, v185), "COMPATIBLE")
         self.assertIn("incompatible", verify_dll.check_compat(1, "P", 0, 0, compat_with_185, 1700000000, v1170))
 
-    def test_verify_preload_shim_dll(self) -> None:
-        shim_path = REPO_ROOT / "sdk" / "preload" / "build" / "AddressLibraryV5Shim.dll"
-        res_auto = verify_dll.verify_dll(shim_path)
-        self.assertTrue(res_auto["is_x64"])
-        self.assertTrue(res_auto["passed_target"])
-        self.assertEqual([k for k in res_auto if k.startswith("passed_")], ["passed_target"])
+    def test_verify_fixture_dll(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            dll_path = pe_fixture.write_test_plugin_dll(Path(td) / "FixturePlugin.dll")
+            res_auto = verify_dll.verify_dll(dll_path)
+            self.assertTrue(res_auto["is_x64"])
+            self.assertTrue(res_auto["passed_target"])
+            self.assertEqual([k for k in res_auto if k.startswith("passed_")], ["passed_target"])
 
-        res = verify_dll.verify_dll(shim_path, target_runtime="1.8.5")
-        self.assertTrue(res["passed_target"])
-        self.assertEqual(res["runtime_checks"].get("1.8.5"), "COMPATIBLE")
+            res = verify_dll.verify_dll(dll_path, target_runtime="1.8.5")
+            self.assertTrue(res["passed_target"])
+            self.assertEqual(res["runtime_checks"].get("1.8.5"), "COMPATIBLE")
 
-        triage = triage_modlist.classify_dll(shim_path)
-        self.assertEqual(triage["status"], "OK")
+            triage = triage_modlist.classify_dll(dll_path)
+            self.assertEqual(triage["status"], "OK")
 
     def test_patch_binary_metadata_on_dll_copy(self) -> None:
-        shim_src = REPO_ROOT / "sdk" / "preload" / "build" / "AddressLibraryV5Shim.dll"
         with tempfile.TemporaryDirectory() as td:
-            dll_copy = Path(td) / "LegacyCopy.dll"
-            shutil.copy2(shim_src, dll_copy)
+            dll_copy = pe_fixture.write_test_plugin_dll(Path(td) / "LegacyCopy.dll")
 
             raw = bytearray(dll_copy.read_bytes())
             e_lf, sections, exports = patch_binary.parse_pe64_sections_and_exports(bytes(raw))

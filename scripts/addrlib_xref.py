@@ -361,7 +361,7 @@ def scan_dll_address_library(dll_path: Path, target_runtime: Optional[str] = Non
         )
         if fp["framework"] in ("CommonLibSSE", "CommonLibSSE-NG"):
             remediations.append(
-                "Binary embeds a pre-v5 CommonLibSSE REL::IDDatabase loader; patch format check + unpack loop or test with AddressLibraryV5Shim.dll."
+                "Binary embeds a pre-v5 CommonLibSSE REL::IDDatabase loader; patch format check + unpack loop via manifest_patcher.py (see docs/BINARY_PATCHING_GUIDE.md)."
             )
         elif "versiondb" in fp["framework"].lower():
             remediations.append(

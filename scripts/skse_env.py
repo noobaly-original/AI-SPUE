@@ -40,6 +40,8 @@ DIST_DIR = REPO_ROOT / "dist"
 WORKSPACE_DIR = REPO_ROOT / "workspace"
 BIN_DIR = SDK_DIR / "address_tables" / "bin"
 SE_AE_CSV = SDK_DIR / "address_tables" / "se_ae_offsets.csv"
+AE_RENAME_FILE = SDK_DIR / "address_tables" / "skyrimae.rename"
+RELIB_FILE = SDK_DIR / "address_tables" / "skyrimae.relib"
 CLIB_INC = SDK_DIR / "CommonLibSSE-NG" / "include" / "RE"
 CLIB_SRC = SDK_DIR / "CommonLibSSE-NG" / "src" / "RE"
 CLIB_VER_H = SDK_DIR / "CommonLibSSE-NG" / "include" / "SKSE" / "Version.h"
@@ -62,7 +64,8 @@ _CPP_TOKEN_RE = re.compile(
 )
 
 _ID_MAPS_MEM_CACHE: Optional[Tuple[Dict[int, int], Dict[int, int], Dict[int, str], Dict[int, int]]] = None
-_ID_MAP_CACHE_SCHEMA = 1
+_AE_RENAME_MEM_CACHE: Optional[Tuple[Path, int, int, Dict[int, str]]] = None
+_ID_MAP_CACHE_SCHEMA = 2
 
 
 def parse_version_tuple(ver_str: str) -> Tuple[int, int, int, int]:
@@ -568,13 +571,55 @@ def strip_cpp_comments_preserve_lines(text: str) -> str:
 
 
 def clear_id_maps_cache() -> None:
-    global _ID_MAPS_MEM_CACHE
+    global _ID_MAPS_MEM_CACHE, _AE_RENAME_MEM_CACHE
     _ID_MAPS_MEM_CACHE = None
+    _AE_RENAME_MEM_CACHE = None
+
+
+def load_ae_rename_map(rename_path: Path = AE_RENAME_FILE) -> Dict[int, str]:
+    """Load `skyrimae.rename` (`{ae_id: symbol_name}`) if present on disk."""
+    global _AE_RENAME_MEM_CACHE
+    if not rename_path.exists():
+        return {}
+    try:
+        st = rename_path.stat()
+    except OSError:
+        return {}
+    if _AE_RENAME_MEM_CACHE is not None:
+        cached_path, cached_mtime, cached_size, cached_map = _AE_RENAME_MEM_CACHE
+        if cached_path == rename_path and cached_mtime == st.st_mtime_ns and cached_size == st.st_size:
+            return cached_map
+
+    names: Dict[int, str] = {}
+    saw_header = False
+    for raw_line in rename_path.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith(";") or stripped.startswith("#"):
+            continue
+        if not saw_header and " " not in stripped and stripped.isdigit():
+            saw_header = True
+            continue
+        saw_header = True
+        sep = stripped.find(" ")
+        if sep <= 0:
+            continue
+        sym_name = stripped[sep + 1 :].strip()
+        if not sym_name:
+            continue
+        try:
+            vid = int(stripped[:sep])
+        except ValueError:
+            continue
+        names[vid] = sym_name
+
+    _AE_RENAME_MEM_CACHE = (rename_path, st.st_mtime_ns, st.st_size, names)
+    return names
 
 
 def _compute_id_map_fingerprint(
     csv_path: Path = SE_AE_CSV,
     clib_dirs: Tuple[Path, ...] = (CLIB_INC, CLIB_SRC),
+    rename_path: Path = AE_RENAME_FILE,
 ) -> Dict[str, Any]:
     csv_mtime_ns = 0
     csv_size = 0
@@ -582,6 +627,13 @@ def _compute_id_map_fingerprint(
         st = csv_path.stat()
         csv_mtime_ns = st.st_mtime_ns
         csv_size = st.st_size
+
+    rename_mtime_ns = 0
+    rename_size = 0
+    if rename_path.exists():
+        st = rename_path.stat()
+        rename_mtime_ns = st.st_mtime_ns
+        rename_size = st.st_size
 
     clib_max_mtime_ns = 0
     clib_count = 0
@@ -606,6 +658,8 @@ def _compute_id_map_fingerprint(
         "schema": _ID_MAP_CACHE_SCHEMA,
         "csv_mtime_ns": csv_mtime_ns,
         "csv_size": csv_size,
+        "rename_mtime_ns": rename_mtime_ns,
+        "rename_size": rename_size,
         "clib_max_mtime_ns": clib_max_mtime_ns,
         "clib_count": clib_count,
     }
@@ -703,6 +757,18 @@ def load_id_maps(
                                 se_to_sym[se_id] = f"{existing} {split_note}"
                         else:
                             se_to_sym[se_id] = split_note
+
+    ae_rename = load_ae_rename_map()
+    if ae_rename:
+        for se_id, ae_id in se_to_ae.items():
+            sym_name = ae_rename.get(ae_id)
+            if not sym_name:
+                continue
+            existing = se_to_sym.get(se_id, "")
+            if not existing:
+                se_to_sym[se_id] = sym_name
+            elif existing.startswith("[AE Split:") and sym_name not in existing:
+                se_to_sym[se_id] = f"{sym_name} {existing}"
 
     result = (se_to_ae, ae_to_se, se_to_sym, ae_split_to_new)
     if use_cache:

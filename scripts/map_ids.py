@@ -48,6 +48,7 @@ def build_combined_se_ae_maps() -> Tuple[Dict[int, int], Dict[int, int], Dict[in
 
 def cmd_se2ae(args) -> int:
     se_to_ae, _, se_to_sym = build_combined_se_ae_maps()
+    ae_rename = skse_env.load_ae_rename_map()
     db_se = AddressLibBin(resolve_bin_path("1-5-97-0"))
     db_1170 = AddressLibBin(resolve_bin_path("1-6-1170-0"))
     db_latest = AddressLibBin(resolve_bin_path(skse_env.get_default_target_dash()))
@@ -58,6 +59,8 @@ def cmd_se2ae(args) -> int:
     for se_id in args.ids:
         ae_id = se_to_ae.get(se_id)
         sym = se_to_sym.get(se_id, "")
+        if not sym and ae_id is not None:
+            sym = ae_rename.get(ae_id, "")
         off_se = db_se.id_to_offset.get(se_id)
         off_se_s = f"0x{off_se:08x}" if off_se is not None else "MISSING"
 
@@ -77,6 +80,7 @@ def cmd_se2ae(args) -> int:
 
 def cmd_ae2se(args) -> int:
     se_to_ae, ae_to_se, se_to_sym = build_combined_se_ae_maps()
+    ae_rename = skse_env.load_ae_rename_map()
     db_1170 = AddressLibBin(resolve_bin_path("1-6-1170-0"))
     db_latest = AddressLibBin(resolve_bin_path(skse_env.get_default_target_dash()))
     latest_hdr = f"{db_latest.version_str} Offset"
@@ -87,6 +91,8 @@ def cmd_ae2se(args) -> int:
         se_id = ae_to_se.get(ae_id)
         latest_ae = se_to_ae.get(se_id, ae_id) if se_id else ae_id
         sym = se_to_sym.get(se_id, "") if se_id else ""
+        if not sym:
+            sym = ae_rename.get(latest_ae) or ae_rename.get(ae_id, "")
         off_1170 = db_1170.id_to_offset.get(ae_id)
         off_latest = db_latest.id_to_offset.get(latest_ae)
         s_1170 = f"0x{off_1170:08x}" if off_1170 is not None else "MISSING"
@@ -101,6 +107,7 @@ def cmd_ae2se(args) -> int:
 
 def cmd_offset2id(args) -> int:
     se_to_ae, ae_to_se, se_to_sym = build_combined_se_ae_maps()
+    ae_rename = skse_env.load_ae_rename_map()
     db = AddressLibBin(resolve_bin_path(args.runtime))
 
     for raw in args.offsets:
@@ -117,7 +124,7 @@ def cmd_offset2id(args) -> int:
             else:
                 ae_id = exact_id
                 se_id = ae_to_se.get(ae_id, 0)
-            sym = se_to_sym.get(se_id, "")
+            sym = se_to_sym.get(se_id, "") or (ae_rename.get(ae_id, "") if ae_id else "")
             print(f"Offset 0x{val:08x} in {db.version_str} ==> Exact ID: {exact_id} | REL::RelocationID({se_id}, {ae_id}) {sym}")
         else:
             # Find nearest function base <= val
@@ -132,9 +139,11 @@ def cmd_offset2id(args) -> int:
                 else:
                     ae_id = base_id
                     se_id = ae_to_se.get(ae_id, 0)
+                sym = se_to_sym.get(se_id, "") or (ae_rename.get(ae_id, "") if ae_id else "")
+                sym_suffix = f" {sym}" if sym else ""
                 print(
                     f"Offset 0x{val:08x} in {db.version_str} ==> Inside ID {base_id} (0x{base_off:08x}) + 0x{delta:x} "
-                    f"| REL::RelocationID({se_id}, {ae_id}), 0x{delta:x}"
+                    f"| REL::RelocationID({se_id}, {ae_id}), 0x{delta:x}{sym_suffix}"
                 )
             else:
                 print(f"Offset 0x{val:08x} in {db.version_str} ==> Not found in {db.path.name}")
