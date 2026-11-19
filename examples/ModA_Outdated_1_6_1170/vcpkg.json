@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
+  "name": "moda-outdated-1-6-1170",
+  "version-semver": "1.2.0",
+  "builtin-baseline": "a4971fc6292f468b4c977978f3c6a32200a55712",
+  "dependencies": [
+    "commonlibsse-ng",
+    "spdlog"
+  ]
+}

@@ -1,0 +1,5 @@
+# AI Agent Instructions (`AGENT_INSTRUCTIONS.md`)
+
+Please read and follow **`UPDATE_INSTRUCTIONS.md`** in this directory. It contains the **Detect-First** environment resolver (`scripts/skse_env.py`), complete environment map, 4-step automated toolchain (`scripts/analyze_mod.py` -> `scripts/upgrade_mod.py` -> `scripts/inspect_bin.py` -> `scripts/build_mod.py`), and C++ migration cookbook for updating Skyrim Special Edition / Anniversary Edition SKSE64 plugins to **whatever target Skyrim runtime, SKSE64 build, and Address Library database are currently installed locally** (while preserving historical backward compatibility where possible).
+
+If source compilation is impossible because the plugin is closed-source or missing private SDK headers, switch to the reverse-engineering, manifest-driven binary patching, and live-debugging playbook in **`docs/BINARY_PATCHING_GUIDE.md`** (`scripts/pe_inspect.py` -> `scripts/addrlib_xref.py` -> `scripts/manifest_patcher.py` -> `scripts/live_test_skse.ps1`).

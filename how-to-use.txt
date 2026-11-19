@@ -1,0 +1,131 @@
+================================================================================
+ AI-SPUE / AIPUE - AI Assisted SKSE Plugin Upgrader Environment
+ Quick-Start & How-To-Use Guide
+================================================================================
+
+OVERVIEW
+--------
+AI-SPUE is a self-contained C++ build, migration, and reverse-engineering
+environment for Skyrim Special Edition / Anniversary Edition (SKSE64) DLL
+plugins. It enables any AI coding agent (Antigravity, Claude Code, Cursor,
+Codex, etc.) to automatically:
+
+  1. Detect your currently installed SkyrimSE.exe, SKSE64, and Address Library
+     versions ("Detect-First" -- no hardcoded target version numbers).
+  2. Recompile open-source SKSE64 plugins against prebuilt CommonLibSSE-NG
+     and Format 5 Address Library headers.
+  3. Fall back to deterministic, manifest-driven x64 binary patching
+     (patches.json) when a mod has closed-source or incomplete C++ headers.
+  4. Verify SKSE64 PluginManager compatibility and PE64 checksums before
+     packaging a ready-to-install Mod Manager ZIP archive in dist\.
+
+
+BEFORE YOU START (ONE-TIME CHECK)
+---------------------------------
+1. Extract AI-SPUE to a short path on your PC (e.g., C:\Modding\AI-SPUE).
+   Do NOT install AI-SPUE itself into MO2 or Vortex as a Skyrim mod.
+2. Ensure the following are installed on your PC:
+   - Visual Studio 2022 (Community or Build Tools) with the
+     "Desktop development with C++" workload (MSVC v143 x64 + Windows SDK)
+   - Python 3.10+ (64-bit) on PATH
+   - Git for Windows on PATH
+   - Skyrim SE/AE with your target SKSE64 and Address Library installed
+
+
+================================================================================
+ WORKFLOW 1: Let Your AI Agent Do Everything Automatically (Recommended)
+================================================================================
+
+Open your AI coding agent in the root folder of AI-SPUE and paste one of the
+prompts below:
+
+[A] Update an Open-Source Mod from a GitHub URL
+-----------------------------------------------
+Prompt:
+  The UPDATE_INSTRUCTIONS.md file is your instructions. Auto-detect my
+  installed Skyrim SE/AE, SKSE64, and Address Library versions and update
+  the mod in this GitHub link: https://github.com/author/ModRepository
+
+[B] Update a Mod from a Local Source Code Folder
+------------------------------------------------
+Prompt:
+  The UPDATE_INSTRUCTIONS.md file is your instructions. Auto-detect my
+  installed Skyrim SE/AE, SKSE64, and Address Library versions and update
+  the mod in this local folder: C:\path\to\mod_source_code
+
+[C] Patch a Compiled .dll or Mod Archive (Closed-Source / Missing Headers)
+--------------------------------------------------------------------------
+Prompt:
+  Follow UPDATE_INSTRUCTIONS.md and docs/BINARY_PATCHING_GUIDE.md to
+  auto-detect my installed Skyrim/Address Library versions and port,
+  manifest-patch, and verify this plugin: C:\path\to\Plugin.dll
+
+[D] Scan Your Entire Installed SKSE Plugins Folder for Incompatible DLLs
+------------------------------------------------------------------------
+Prompt:
+  Run scripts/triage_modlist.py against my Skyrim Data\SKSE\Plugins folder
+  and report which plugins need recompiling or binary patching for my
+  installed Skyrim version.
+
+
+WHERE TO FIND YOUR UPDATED MOD
+------------------------------
+When the agent finishes, your updated mod is placed in the "dist\" folder:
+
+  - dist\<ModName>_Updated.zip
+      Drag and drop this ZIP directly into Mod Organizer 2 (MO2) or Vortex!
+
+  - dist\<ModName>\SKSE\Plugins\<ModName>.dll
+      Unpacked updated DLL and companion files.
+
+
+================================================================================
+ WORKFLOW 2: Manual / PowerShell CLI Commands (For Advanced Users)
+================================================================================
+
+Open PowerShell in the root of AI-SPUE and activate the portable toolchain:
+
+  powershell -ExecutionPolicy Bypass -Command ". .\scripts\env.ps1"
+
+Common CLI commands:
+
+  1. Detect installed Skyrim, SKSE64, and Address Library versions:
+       python "scripts/skse_env.py"
+
+  2. Sync a newly released Skyrim patch & Address Library .bin into sdk/:
+       python "scripts/add_new_runtime.py"
+
+  3. Analyze, upgrade, and build a C++ mod from GitHub or a local folder:
+       python "scripts/analyze_mod.py" https://github.com/author/ModRepo --name ModName
+       python "scripts/upgrade_mod.py" "workspace/ModName"
+       python "scripts/build_mod.py" "workspace/ModName"
+
+  4. Inspect and verify a compiled SKSE64 .dll:
+       python "scripts/verify_dll.py" "path/to/Plugin.dll"
+       python "scripts/pe_inspect.py" inspect "path/to/Plugin.dll"
+
+  5. Apply a deterministic binary patch manifest (patches.json):
+       python "scripts/manifest_patcher.py" verify-manifest "path/to/Plugin.dll" -m "patches.json"
+       python "scripts/manifest_patcher.py" apply "path/to/Plugin.dll" -m "patches.json" --zip
+
+  6. Triage your installed modlist or diagnose the latest SKSE / Crash Logger dump:
+       python "scripts/triage_modlist.py"
+       python "scripts/triage_crash.py"
+       powershell -NoProfile -ExecutionPolicy Bypass -File "scripts/live_test_skse.ps1" -NoLaunch
+
+  7. Run the automated self-test suite:
+       python -B -m unittest discover -s tests -v
+
+
+================================================================================
+ KEY FILES IN THIS ENVIRONMENT
+================================================================================
+- README.md                     : Overview and quick prompt templates
+- UPDATE_INSTRUCTIONS.md        : Master AI agent source-update playbook
+- docs/BINARY_PATCHING_GUIDE.md : AI agent x64 reverse-engineering & binary-patch guide
+- UPDATE_PROJECT_TOOLS.md       : Playbook for upgrading bundled SDKs & build tools
+- AGENTS.md / CLAUDE.md         : Auto-loaded agent entry points
+- scripts/                      : Python & PowerShell automation and RE toolset
+- sdk/                          : Prebuilt CommonLibSSE-NG, skse64, Address Library .bin
+- tools/                        : Portable CMake, Ninja, XMake, and vcpkg
+================================================================================

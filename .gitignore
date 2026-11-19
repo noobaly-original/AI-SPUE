@@ -1,0 +1,24 @@
+# Python bytecode & virtual environment
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+
+# Working & output artifacts
+workspace/*
+dist/*
+*.bak
+sdk/address_tables/.id_map_cache.json
+sdk/CommonLibSSE-NG-Installed/
+
+# Portable third-party toolchains (bundled in Nexus release archive; excluded on GitHub)
+tools/cmake/
+tools/ninja/
+tools/xmake/
+tools/vcpkg/
+
+# IDE / build intermediates
+.vs/
+sdk/preload/build/*
+!sdk/preload/build/AddressLibraryV5Shim.dll

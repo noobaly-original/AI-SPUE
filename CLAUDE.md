@@ -1,0 +1,3 @@
+# Claude Code Instructions (`CLAUDE.md`)
+
+Always read and follow **`UPDATE_INSTRUCTIONS.md`** in this directory when asked to update, port, or recompile any Skyrim SE/AE SKSE64 plugin in this workspace. Always start with the **Detect-First** step (`python "scripts/skse_env.py"`) so the target runtime, SKSE64 version, and Address Library `.bin` are dynamically resolved from the user's installation rather than hardcoded. When source compilation is blocked by missing private headers or unavailable source code, read and follow **`docs/BINARY_PATCHING_GUIDE.md`** to inspect, manifest-patch, and live-debug the `.dll`.

@@ -1,0 +1,47 @@
+{
+  "name": "commonlibsse-ng",
+  "version-semver": "16.9.0",
+  "port-version": 0,
+  "description": "Local prebuilt CommonLibSSE-NG (supports SE 1.5.97, AE 1.6.x, AE 1.7.99+ Format v5, VR).",
+  "homepage": "https://github.com/alandtse/CommonLibSSE-NG",
+  "license": "GPL-3.0-or-later",
+  "supports": "windows & x64",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    },
+    "directxmath",
+    "directxtk",
+    "fmt",
+    "nlohmann-json",
+    "rapidcsv",
+    "simpleini",
+    "spdlog",
+    "toml11",
+    "xbyak"
+  ],
+  "features": {
+    "rex-ini": {
+      "description": "Enable ini config support for REX."
+    },
+    "rex-json": {
+      "description": "Enable json config support for REX."
+    },
+    "rex-toml": {
+      "description": "Enable toml config support for REX."
+    },
+    "skse-xbyak": {
+      "description": "Enable trampoline support for Xbyak."
+    },
+    "skyrim-se": {
+      "description": "Enable support for Skyrim SE."
+    },
+    "skyrim-ae": {
+      "description": "Enable support for Skyrim AE."
+    },
+    "skyrim-vr": {
+      "description": "Enable support for Skyrim VR."
+    }
+  }
+}
