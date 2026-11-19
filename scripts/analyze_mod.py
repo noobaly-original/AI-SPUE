@@ -380,6 +380,23 @@ def analyze_mod(mod_dir: Path, target_runtime: Optional[str] = None) -> Dict[str
             "warnings (`C4996`, `C5260`, etc.) on older C++ code. `upgrade_mod.py` changes `/WX` to `/WX-` in `CMakeLists.txt`."
         )
 
+    # 7b. Security & Untrusted Build-Hook Audit
+    sec_audit = skse_env.audit_mod_security(mod_dir)
+    report["security_audit"] = sec_audit
+    for hook in sec_audit["dangerous_build_hooks"]:
+        report["issues"].append(
+            f"SECURITY RISK (SUSPICIOUS BUILD HOOK): {hook['file']}:{hook['line']}: `{hook['snippet']}`"
+        )
+    if sec_audit["prompt_injection_suspects"]:
+        sample = "; ".join(f"{p['file']}:{p['line']}" for p in sec_audit["prompt_injection_suspects"][:5])
+        report["warnings"].append(
+            f"PROMPT-INJECTION STRINGS IGNORED AS UNTRUSTED DATA ({len(sec_audit['prompt_injection_suspects'])} hit(s)): {sample}"
+        )
+    if sec_audit["bundled_scripts_or_exes"]:
+        report["warnings"].append(
+            f"BUNDLED EXECUTABLES/SCRIPTS (DO NOT EXECUTE UNREVIEWED): {', '.join(sec_audit['bundled_scripts_or_exes'][:10])}"
+        )
+
     # 8. Build Recommended Action Plan
     report["recommended_actions"] = [
         f"1. Run automated upgrade patcher: `python scripts/upgrade_mod.py \"{mod_dir}\"`",
@@ -399,6 +416,14 @@ def print_report(rep: Dict[str, Any]) -> None:
     print(f"Build System(s) : {', '.join(rep['build_systems']) or 'None detected'}")
     print(f"SKSE Framework  : {rep['framework']}")
     print(f"Entry Point     : {json.dumps(rep['entry_point'])}")
+    sec = rep.get("security_audit") or {}
+    if sec:
+        print(
+            f"Security Audit  : {'PASS' if sec.get('passed') else 'BLOCKED'} "
+            f"(build_hooks={len(sec.get('dangerous_build_hooks', []))}, "
+            f"prompt_suspects={len(sec.get('prompt_injection_suspects', []))}, "
+            f"bundled_exes={len(sec.get('bundled_scripts_or_exes', []))})"
+        )
     print("-" * 78)
     ids = rep["id_summary"]
     print("Address Library ID Scan:")

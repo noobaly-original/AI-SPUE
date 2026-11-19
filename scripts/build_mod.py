@@ -251,12 +251,32 @@ def main() -> int:
         default=DIST_DIR,
         help=f"Output packaging directory (default: {DIST_DIR})",
     )
+    parser.add_argument(
+        "--allow-unsafe-build-hooks",
+        action="store_true",
+        help="Override security block for flagged shell/network hooks in CMake/XMake/MSBuild files",
+    )
     args = parser.parse_args()
 
     mod_dir = Path(args.mod_dir).resolve()
     if not mod_dir.exists():
         print(f"Error: {mod_dir} does not exist.", file=sys.stderr)
         return 1
+
+    sec_audit = skse_env.audit_mod_security(mod_dir)
+    if sec_audit["dangerous_build_hooks"] and not args.allow_unsafe_build_hooks:
+        print(
+            f"[SECURITY BLOCK] Found {len(sec_audit['dangerous_build_hooks'])} suspicious shell/network hook(s) "
+            f"in build scripts under {mod_dir}:",
+            file=sys.stderr,
+        )
+        for hook in sec_audit["dangerous_build_hooks"]:
+            print(f"  - {hook['file']}:{hook['line']}: {hook['snippet']}", file=sys.stderr)
+        print(
+            "Inspect the flagged lines above. Re-run with `--allow-unsafe-build-hooks` only if you have verified they are safe.",
+            file=sys.stderr,
+        )
+        return 3
 
     dist_dir = args.dist_dir.resolve()
     env = load_build_environment()

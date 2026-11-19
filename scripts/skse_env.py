@@ -725,6 +725,115 @@ def load_id_maps(
     return result
 
 
+_SEC_IGNORE_DIRS = {
+    "build",
+    ".git",
+    ".vs",
+    ".xmake",
+    "vcpkg_installed",
+    "extern",
+    "external",
+    "deps",
+    "submodules",
+    "commonlibsse",
+    "commonlibsse-ng",
+}
+
+_BUILD_HOOK_RE = re.compile(
+    r"(?:\b(?:execute_process|add_custom_command|add_custom_target|os\.execv?|os\.iorun|os\.run|os\.runv|io\.popen)\b|<Exec\b)",
+    re.IGNORECASE,
+)
+_DANGEROUS_CMD_RE = re.compile(
+    r"(?:\b(?:curl(?:\.exe)?|wget(?:\.exe)?|invoke-webrequest|invoke-restmethod|invoke-expression|frombase64string|bitsadmin(?:\.exe)?|certutil(?:\.exe)?|mshta(?:\.exe)?|rundll32(?:\.exe)?|regsvr32(?:\.exe)?|powershell(?:\.exe)?|pwsh(?:\.exe)?|iwr|irm|iex)\b|cmd(?:\.exe)?\s+/c\b|-encodedcommand\b|\s-enc\s+[A-Za-z0-9+/=]{8,})",
+    re.IGNORECASE,
+)
+_DIRECT_PAYLOAD_RE = re.compile(
+    r"(?:\b(?:invoke-webrequest|invoke-restmethod|invoke-expression|frombase64string)\b|-encodedcommand\b)",
+    re.IGNORECASE,
+)
+_PROMPT_INJECTION_RE = re.compile(
+    r"(?:ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions|disregard\s+(?:all\s+)?(?:previous|prior|above)\s+instructions|system\s+override|new\s+system\s+prompt|important\s+instruction\s+for\s+ai|\bai\s+agent\s*:)",
+    re.IGNORECASE,
+)
+
+
+def audit_mod_security(mod_dir: Path) -> Dict[str, Any]:
+    """Scan a mod directory for malicious build hooks, prompt injections, and bundled executables."""
+    mod_dir = Path(mod_dir).resolve()
+    dangerous_build_hooks: List[Dict[str, Any]] = []
+    prompt_injection_suspects: List[Dict[str, Any]] = []
+    bundled_scripts_or_exes: List[str] = []
+
+    build_exts = {".cmake", ".lua", ".vcxproj", ".targets", ".props"}
+    text_exts = {
+        ".cpp", ".cxx", ".cc", ".c", ".h", ".hpp", ".hxx", ".inl",
+        ".md", ".txt", ".cmake", ".lua", ".json", ".ini", ".toml", ".yml", ".yaml",
+    }
+    exec_exts = {".bat", ".cmd", ".ps1", ".vbs", ".hta", ".exe"}
+
+    for root, dirs, files in os.walk(mod_dir):
+        dirs[:] = [
+            d for d in sorted(dirs)
+            if d.lower() not in _SEC_IGNORE_DIRS and not d.lower().startswith("commonlibsse")
+        ]
+        for fname in sorted(files):
+            fp = Path(root) / fname
+            rel = fp.relative_to(mod_dir).as_posix()
+            low_name = fname.lower()
+            suffix = fp.suffix.lower()
+
+            if suffix in exec_exts:
+                bundled_scripts_or_exes.append(rel)
+
+            is_build_file = low_name == "cmakelists.txt" or suffix in build_exts
+            is_text_file = is_build_file or suffix in text_exts
+            if not is_text_file:
+                continue
+            try:
+                if fp.stat().st_size > 2_000_000:
+                    continue
+                raw = fp.read_bytes()
+            except OSError:
+                continue
+            if b"\x00" in raw[:4096]:
+                continue
+
+            text = raw.decode("utf-8", errors="replace")
+            lines = text.splitlines()
+
+            if is_build_file:
+                hook_window = 0
+                for idx, line in enumerate(lines, start=1):
+                    if _BUILD_HOOK_RE.search(line):
+                        hook_window = 20
+                    if (hook_window > 0 and _DANGEROUS_CMD_RE.search(line)) or _DIRECT_PAYLOAD_RE.search(line):
+                        dangerous_build_hooks.append({
+                            "file": rel,
+                            "line": idx,
+                            "snippet": line.strip()[:160],
+                        })
+                    if hook_window > 0:
+                        if ")" in line and "(" not in line and "<" not in line:
+                            hook_window = max(0, hook_window - 5)
+                        else:
+                            hook_window -= 1
+
+            for idx, line in enumerate(lines, start=1):
+                if _PROMPT_INJECTION_RE.search(line):
+                    prompt_injection_suspects.append({
+                        "file": rel,
+                        "line": idx,
+                        "snippet": line.strip()[:160],
+                    })
+
+    return {
+        "passed": len(dangerous_build_hooks) == 0,
+        "dangerous_build_hooks": dangerous_build_hooks,
+        "prompt_injection_suspects": prompt_injection_suspects,
+        "bundled_scripts_or_exes": bundled_scripts_or_exes,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Detect-First Target Skyrim Runtime, SKSE64, and Address Library Resolver"
