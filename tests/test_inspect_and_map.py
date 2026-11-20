@@ -1,3 +1,4 @@
+import csv
 import sys
 import tempfile
 import unittest
@@ -53,6 +54,29 @@ class TestInspectAndMap(unittest.TestCase):
         self.assertEqual(se_to_ae[514287], 400447)
         self.assertEqual(ae_to_se[400447], 514287)
         self.assertEqual(se_to_ae[46022], 523983)
+
+    def test_bundled_se_ae_csv_template_and_fallback(self) -> None:
+        tpl_csv = skse_env.SE_AE_CSV_TEMPLATE
+        self.assertTrue(tpl_csv.is_file())
+        self.assertTrue((tpl_csv.parent / "LICENSE-se_ae_offsets.txt").is_file())
+
+        mapped_rows = 0
+        with tpl_csv.open("r", encoding="utf-8", errors="replace") as f:
+            reader = csv.DictReader(f)
+            self.assertEqual(reader.fieldnames, ["sseid", "aeid", "comments"])
+            for row in reader:
+                ae_val = (row.get("aeid") or "").strip()
+                sym_val = (row.get("comments") or "").strip()
+                self.assertTrue(ae_val or sym_val, f"Empty row in compact CSV: {row!r}")
+                if (row.get("sseid") or "").strip() and ae_val:
+                    mapped_rows += 1
+        self.assertGreaterEqual(mapped_rows, 29000)
+
+        with tempfile.TemporaryDirectory() as td:
+            with mock.patch.object(skse_env, "SE_AE_CSV", Path(td) / "missing.csv"):
+                se_to_ae, _, _, _ = skse_env.load_id_maps(use_cache=False)
+                self.assertEqual(se_to_ae[514287], 400447)
+                self.assertEqual(se_to_ae[3], 9)
 
     def test_scan_mod_ids_ignores_comments_preserves_lines(self) -> None:
         cpp = (

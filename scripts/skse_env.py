@@ -40,6 +40,7 @@ DIST_DIR = REPO_ROOT / "dist"
 WORKSPACE_DIR = REPO_ROOT / "workspace"
 BIN_DIR = SDK_DIR / "address_tables" / "bin"
 SE_AE_CSV = SDK_DIR / "address_tables" / "se_ae_offsets.csv"
+SE_AE_CSV_TEMPLATE = REPO_ROOT / "templates" / "sdk" / "address_tables" / "se_ae_offsets.csv"
 AE_RENAME_FILE = SDK_DIR / "address_tables" / "skyrimae.rename"
 RELIB_FILE = SDK_DIR / "address_tables" / "skyrimae.relib"
 CLIB_INC = SDK_DIR / "CommonLibSSE-NG" / "include" / "RE"
@@ -616,11 +617,17 @@ def load_ae_rename_map(rename_path: Path = AE_RENAME_FILE) -> Dict[int, str]:
     return names
 
 
+def _resolve_se_ae_csv() -> Path:
+    """Return the active `se_ae_offsets.csv` in `sdk/`, falling back to `templates/sdk/`."""
+    return SE_AE_CSV if SE_AE_CSV.exists() else SE_AE_CSV_TEMPLATE
+
+
 def _compute_id_map_fingerprint(
-    csv_path: Path = SE_AE_CSV,
+    csv_path: Optional[Path] = None,
     clib_dirs: Tuple[Path, ...] = (CLIB_INC, CLIB_SRC),
     rename_path: Path = AE_RENAME_FILE,
 ) -> Dict[str, Any]:
+    csv_path = csv_path if csv_path is not None else _resolve_se_ae_csv()
     csv_mtime_ns = 0
     csv_size = 0
     if csv_path.exists():
@@ -656,6 +663,7 @@ def _compute_id_map_fingerprint(
 
     return {
         "schema": _ID_MAP_CACHE_SCHEMA,
+        "csv_path": str(csv_path),
         "csv_mtime_ns": csv_mtime_ns,
         "csv_size": csv_size,
         "rename_mtime_ns": rename_mtime_ns,
@@ -671,14 +679,17 @@ def load_id_maps(
     """
     Load combined `(se_to_ae, ae_to_se, se_to_sym, ae_split_to_new)` maps.
 
-    Combines `sdk/address_tables/se_ae_offsets.csv` with `sdk/CommonLibSSE-NG` `RE/` headers/sources
-    (where CommonLibSSE-NG overrides stale CSV entries and contributes `AE_CHECK` splits).
+    Combines `sdk/address_tables/se_ae_offsets.csv` (falling back to
+    `templates/sdk/address_tables/se_ae_offsets.csv`) with `sdk/CommonLibSSE-NG`
+    `RE/` headers/sources (where CommonLibSSE-NG overrides stale CSV entries and
+    contributes `AE_CHECK` splits).
     """
     global _ID_MAPS_MEM_CACHE
     if use_cache and _ID_MAPS_MEM_CACHE is not None:
         return _ID_MAPS_MEM_CACHE
 
-    fingerprint = _compute_id_map_fingerprint()
+    csv_path = _resolve_se_ae_csv()
+    fingerprint = _compute_id_map_fingerprint(csv_path=csv_path)
     if use_cache and ID_MAP_CACHE_FILE.exists():
         try:
             payload = json.loads(ID_MAP_CACHE_FILE.read_text(encoding="utf-8"))
@@ -699,8 +710,8 @@ def load_id_maps(
     se_to_sym: Dict[int, str] = {}
     ae_split_to_new: Dict[int, int] = {}
 
-    if SE_AE_CSV.exists():
-        with SE_AE_CSV.open("r", encoding="utf-8", errors="replace") as f:
+    if csv_path.exists():
+        with csv_path.open("r", encoding="utf-8", errors="replace") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 sse_s = (row.get("sseid") or "").strip()
@@ -773,20 +784,20 @@ def load_id_maps(
     result = (se_to_ae, ae_to_se, se_to_sym, ae_split_to_new)
     if use_cache:
         _ID_MAPS_MEM_CACHE = result
-        try:
-            ID_MAP_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            tmp_path = ID_MAP_CACHE_FILE.with_suffix(".json.tmp")
-            payload = {
-                "fingerprint": fingerprint,
-                "se_to_ae": {str(k): v for k, v in se_to_ae.items()},
-                "ae_to_se": {str(k): v for k, v in ae_to_se.items()},
-                "se_to_sym": {str(k): v for k, v in se_to_sym.items()},
-                "ae_split_to_new": {str(k): v for k, v in ae_split_to_new.items()},
-            }
-            tmp_path.write_text(json.dumps(payload), encoding="utf-8")
-            os.replace(tmp_path, ID_MAP_CACHE_FILE)
-        except OSError:
-            pass
+        if ID_MAP_CACHE_FILE.parent.exists():
+            try:
+                tmp_path = ID_MAP_CACHE_FILE.with_suffix(".json.tmp")
+                payload = {
+                    "fingerprint": fingerprint,
+                    "se_to_ae": {str(k): v for k, v in se_to_ae.items()},
+                    "ae_to_se": {str(k): v for k, v in ae_to_se.items()},
+                    "se_to_sym": {str(k): v for k, v in se_to_sym.items()},
+                    "ae_split_to_new": {str(k): v for k, v in ae_split_to_new.items()},
+                }
+                tmp_path.write_text(json.dumps(payload), encoding="utf-8")
+                os.replace(tmp_path, ID_MAP_CACHE_FILE)
+            except OSError:
+                pass
 
     return result
 

@@ -182,12 +182,13 @@ python -m venv .venv
 
 ## Step 3: Copy AI-SPUE SDK Templates (`templates/sdk/` -> `sdk/`)
 
-Copy AI-SPUE's plain-text Format 5 `versionlibdb.h` headers and local `commonlibsse-ng` vcpkg overlay port into `sdk/`:
+Copy AI-SPUE's plain-text Format 5 `versionlibdb.h` headers, local `commonlibsse-ng` vcpkg overlay port, and bundled compact SE (`1.5.97`) <-> AE (`1.6+`) ID bridge (`se_ae_offsets.csv`) into `sdk/`:
 
 ```powershell
 New-Item -ItemType Directory -Force -Path "sdk" | Out-Null
-foreach ($sub in @("AddressLibrary", "vcpkg-overlays")) {
-    Copy-Item -Path "templates\sdk\$sub" -Destination "sdk\$sub" -Recurse -Force
+foreach ($sub in @("AddressLibrary", "vcpkg-overlays", "address_tables")) {
+    New-Item -ItemType Directory -Force -Path "sdk\$sub" | Out-Null
+    Copy-Item -Path "templates\sdk\$sub\*" -Destination "sdk\$sub" -Recurse -Force
 }
 ```
 
@@ -396,18 +397,14 @@ if m:
 
 ## Step 5: Populate `sdk/address_tables/`
 
-Download the community SE (`1.5.97`) <-> AE (`1.6.x`) ID bridge (`se_ae_offsets.csv`), fetch the AE symbol names (`skyrimae.rename`) from `meh321/AddressLibraryDatabase`, and copy the Address Library `.bin` files from your local Skyrim installation:
+Restore the bundled SE (`1.5.97`) <-> AE (`1.6+`) ID bridge (`se_ae_offsets.csv`) from `templates/sdk/address_tables/`, fetch the AE symbol names (`skyrimae.rename`) from `meh321/AddressLibraryDatabase`, and copy the Address Library `.bin` files from your local Skyrim installation:
 
 ```powershell
 New-Item -ItemType Directory -Force -Path "sdk\address_tables\bin" | Out-Null
 
-# Download SE <-> AE cross-reference CSV from alandtse/skyrim_vr_address_library
-# (Supplies the historical 1.5.97 SE <-> 1.6.x AE ID bridge that meh321's AE-only .relib lacks)
-if (-not (Test-Path "sdk\address_tables\se_ae_offsets.csv")) {
-    Write-Host "[*] Downloading se_ae_offsets.csv..."
-    & curl.exe -fsSL "https://raw.githubusercontent.com/alandtse/skyrim_vr_address_library/main/se_ae_offsets.csv" -o "sdk\address_tables\se_ae_offsets.csv"
-    if ($LASTEXITCODE -ne 0) { throw "Failed to download se_ae_offsets.csv" }
-}
+# Restore bundled compact SE <-> AE cross-reference CSV + MIT license from templates/sdk/address_tables/
+# (Supplies the historical 1.5.97 SE <-> 1.6+ AE ID bridge that meh321's AE-only .relib lacks)
+Copy-Item -Path "templates\sdk\address_tables\*" -Destination "sdk\address_tables" -Recurse -Force
 
 # Download skyrimae.rename (~42k AE symbol names) from meh321/AddressLibraryDatabase
 # (Pass --with-relib to also download skyrimae.relib ~74 MB if you need to extract historical 1.6.x Format 2 .bin files or CSV offset tables)
@@ -513,7 +510,9 @@ Expected results:
 
 ## Maintainer Note: Packaging Clean Nexus Mods Releases (Zero `.exe`/`.dll`/`.lib`/`.ps1`)
 
-Before zipping AI-SPUE for upload to Nexus Mods:
+> **Recommended Automated Workflow:** Follow [`PACKAGE.md`](PACKAGE.md) and run `python "scripts/package_nexus.py"` to build and verify `dist/AI-SPUE-Nexus.zip` via temporary staging (`workspace/_nexus_stage`), keeping your local `tools/`, `sdk/`, and `.venv/` intact.
+
+If packaging manually before zipping AI-SPUE for upload to Nexus Mods:
 1. Remove `.venv/`, `tools/`, and `sdk/` contents cleanly (use `cmd /c rmdir /s /q` if `.git` read-only packfiles are present), recreate empty `tools/` and `sdk/` (with `.gitkeep` kept in git, and omitted or empty folders in the Nexus ZIP).
 2. Exclude `.git/`, `.venv/`, `workspace/`, `dist/`, `__pycache__/`, and `.pytest_cache/`.
 3. Verify zero binaries or shell scripts remain in the staging tree:

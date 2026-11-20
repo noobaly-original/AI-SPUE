@@ -3,7 +3,7 @@
 SE <-> AE <-> Offset Address Library Mapper & Source Code Patcher (scripts/map_ids.py)
 
 Combines:
-  1. sdk/address_tables/se_ae_offsets.csv (350,000+ SE <-> AE mappings & symbols)
+  1. sdk/address_tables/se_ae_offsets.csv (compact ~30k SE <-> AE ID mappings & symbols, restored from templates/sdk/address_tables/)
   2. sdk/CommonLibSSE-NG/include/RE/ (all RELOCATION_ID / RelocationID mappings, including 1.7.99+ fixes)
   3. Address Library .bin tables discovered in `sdk/address_tables/bin/` and Skyrim's `Data/SKSE/Plugins/` (Format 1/2/5)
 

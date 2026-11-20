@@ -23,6 +23,6 @@ SOFTWARE.
 --------------------------------------------------------------------------------
 Third-Party Components Notice:
 Bundled third-party SDKs, headers, databases, and build toolchains located under
-`sdk/`, `tools/`, and `.venv/` remain under their respective upstream licenses
+`templates/sdk/`, `sdk/`, `tools/`, and `.venv/` remain under their respective upstream licenses
 (including CommonLibSSE-NG, SKSE64, Address Library databases, CMake, Ninja,
 vcpkg, XMake, pefile, Capstone, Keystone, and LIEF).
